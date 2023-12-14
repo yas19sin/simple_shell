@@ -1,0 +1,9 @@
+# Ignore all files
+*
+
+# Except for .c and .h files
+!*.c
+!*.h
+!*.md
+!.gitignore
+!AUTHORS
