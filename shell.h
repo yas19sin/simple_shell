@@ -1,4 +1,3 @@
-/* shell.h */
 #ifndef SHELL_H
 #define SHELL_H
 
@@ -6,22 +5,22 @@
 #include <stdlib.h>
 #include <unistd.h>
 #include <string.h>
-
-#include <sys/stat.h>
+#include <limits.h>
 #include <sys/types.h>
 #include <sys/wait.h>
 
-#define MAX_COMMANDS 100
-#define MAX_ARGS 64
+#define HISTORY_SIZE 10
 #define BUFFER_SIZE 1024
 
-void execute_command(char *line);
-void free_argv(char **argv);
-char **tokenize_line(char *line);
-int find_command(char *command);
+void display_prompt(void);
+char *read_input(void);
+char **parse_input(char *input);
 void print_environment();
-
 char *custom_getline(void);
-char *custom_strtok(char *str, const char *delimiter);
+
+void execute_command(char *input, char **envp);
+char *find_executable(char *command);
+void add_to_history(char *command);
+void display_history(void);
 
 #endif /* SHELL_H */
