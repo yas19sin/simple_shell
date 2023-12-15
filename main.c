@@ -5,25 +5,46 @@
  *
  * Return: Always 0.
  */
- int main(void)
+int main(int argc, char *argv[])
 {
 	char *input;
 
-	while (1)
+	if (argc > 1)
 	{
-		display_prompt();
-		input = read_input();
-
-		if (input == NULL)
+		FILE *file = fopen(argv[1], "r");
+		if (file == NULL)
 		{
-			printf("\n");
-			break;
+			perror("Error opening file");
+			return EXIT_FAILURE;
 		}
 
-		execute_command(input, NULL);
+		while ((input = custom_getline(file)) != NULL)
+		{
+			execute_command(input, NULL);
+			free(input);
+		}
 
-		free(input);
+		fclose(file);
+		return EXIT_SUCCESS;
 	}
+	else
+	{
+		while (1)
+		{
+			display_prompt();
+			input = read_input();
 
-	return 0;
+			if (input == NULL)
+			{
+				printf("\n");
+				break;
+			}
+
+			execute_command(input, NULL);
+
+			free(input);
+		}
+
+		return EXIT_SUCCESS;
+	}
 }

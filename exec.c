@@ -1,5 +1,9 @@
 #include "shell.h"
 
+Alias aliases[100];
+size_t alias_count = 0;
+int last_exit_status = 0;
+
 /**
  * execute_command - Execute a command with arguments.
  *
@@ -10,7 +14,9 @@ void execute_command(char *input, char **envp)
 {
 	pid_t child_pid;
 	int status;
+	int ar;
 
+	char *replacement;
 	char *executable;
 	char **args = parse_input(input);
 
@@ -18,6 +24,34 @@ void execute_command(char *input, char **envp)
 	{
 		free(args);
 		return;
+	}
+	
+	for (ar = 0; args[ar] != NULL; ar++)
+	{
+		replacement = NULL;
+		if (args[ar][0] == '$')
+		{
+			char *variable_name = args[ar] + 1;
+			char *env_value = getenv(variable_name);
+			if (env_value != NULL)
+			{
+				replacement = strdup(env_value);
+			}
+		}
+		else if (strcmp(args[ar], "$?") == 0)
+		{
+			custom_asprintf(&replacement, "%d", last_exit_status);
+		}
+		else if (strcmp(args[ar], "$$") == 0)
+		{
+			custom_asprintf(&replacement, "%d", getpid());
+		}
+
+		if (replacement != NULL)
+		{
+			free(args[ar]);
+			args[ar] = replacement;
+		}
 	}
 
 	if (strcmp(args[0], "exit") == 0)
@@ -31,7 +65,7 @@ void execute_command(char *input, char **envp)
 		else
 		{
 			free(args);
-			exit(EXIT_SUCCESS);
+			exit(last_exit_status);
 		}
 	}
 	else if (strcmp(args[0], "env") == 0)
@@ -85,8 +119,92 @@ void execute_command(char *input, char **envp)
 			}
 		}
 	}
+	else if (strcmp(args[0], "alias") == 0)
+	{
+		if (args[1] == NULL)
+		{
+			size_t i;
+			for (i = 0; i < alias_count; i++)
+			{
+				printf("%s='%s'\n", aliases[i].name, aliases[i].value);
+			}
+		}
+		else
+		{
+			int i;
+			for (i = 1; args[i] != NULL; i++)
+			{
+				if (strchr(args[i], '=') != NULL)
+				{
+					char *name = strtok(args[i], "=");
+					char *value = strtok(NULL, "=");
+					size_t j;
+
+					for (j = 0; j < alias_count; j++)
+					{
+						if (strcmp(aliases[j].name, name) == 0)
+						{
+							free(aliases[j].value);
+							aliases[j].value = strdup(value);
+							break;
+						}
+					}
+
+					if (alias_count < sizeof(aliases) / sizeof(aliases[0]))
+					{
+						aliases[alias_count].name = strdup(name);
+						aliases[alias_count].value = strdup(value);
+						alias_count++;
+					}
+					else
+					{
+						fprintf(stderr, "alias: too many aliases\n");
+					}
+				}
+				else
+				{
+					int found = 0;
+					size_t j;
+					for (j = 0; j < alias_count; j++)
+					{
+						if (strcmp(aliases[j].name, args[i]) == 0)
+						{
+							printf("%s='%s'\n", aliases[j].name, aliases[j].value);
+							found = 1;
+							break;
+						}
+					}
+					if (!found)
+					{
+						fprintf(stderr, "alias: %s not found\n", args[i]);
+					}
+				}
+			}
+		}
+	}
 	else
 	{
+		char *replacement;
+		int i;
+		for (i = 0; args[i] != NULL; i++)
+		{
+			replacement = NULL;
+			if (strcmp(args[i], "$?") == 0)
+			{
+				custom_asprintf(&replacement, "%d", last_exit_status);
+			}
+			else if (strcmp(args[i], "$$") == 0)
+			{
+				custom_asprintf(&replacement, "%d", getpid());
+			}
+
+			if (replacement != NULL)
+			{
+				free(args[i]);
+				args[i] = replacement;
+			}
+		}
+
 		executable = find_executable(args[0]);
 
 		if (executable == NULL)
@@ -115,6 +233,7 @@ void execute_command(char *input, char **envp)
 		else
 		{
 			waitpid(child_pid, &status, 0);
+			last_exit_status = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 		}
 	}
 
@@ -173,4 +292,40 @@ char *find_executable(char *command)
 
 	free(path_copy);
 	return NULL;
+}
+
+/**
+ * custom_asprintf - The custom asprintf.
+ *
+ * @strp: The first argument.
+ * @fmt: The second argument.
+ * @...: The third argument.
+ *
+ * Return: len or -1.
+ */
+int custom_asprintf(char **strp, const char *fmt, ...)
+{
+	int len;
+
+	va_list args;
+	va_start(args, fmt);
+	len = vsnprintf(NULL, 0, fmt, args);
+	va_end(args);
+
+	if (len < 0)
+	{
+		return -1;
+	}
+
+	*strp = malloc(len + 1);
+	if (*strp == NULL)
+	{
+		return -1;
+	}
+
+	va_start(args, fmt);
+	vsnprintf(*strp, len + 1, fmt, args);
+	va_end(args);
+
+	return len;
 }
