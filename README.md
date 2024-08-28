@@ -18,5 +18,6 @@ This a simple shell project which shows the collaboration effort of a team.
 
 ## Team Members
 
-- [Karim ElHagouchi](https://github.com/hagouchikarim)
 - [Yassine Ennaour](https://github.com/yas19sin)
+- [Moussa Sabbar](https://github.com/thatanoslord)
+- [Karim ElHagouchi](https://github.com/hagouchikarim)
