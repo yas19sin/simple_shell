@@ -1,331 +1,180 @@
 #include "shell.h"
 
-Alias aliases[100];
-size_t alias_count = 0;
-int last_exit_status = 0;
-
 /**
- * execute_command - Execute a command with arguments.
+ * execute_command - Execute a command
  *
- * @input: The command and arguments as a string.
- * @envp: The environment variables.
+ * This function is called by the shell when a command is read from the user.
+ * It parses the command, checks if it is a built-in command and if not, forks
+ * a new process to execute the command.
+ *
+ * @input: The command to execute
+ * @envp: The shell's environment variables
+ * @last_exit_status: The last exit status
  */
-void execute_command(char *input, char **envp)
+void execute_command(char *input, char **envp, int *last_exit_status)
 {
-	pid_t child_pid;
-	int status;
-	int ar;
-
-	char *replacement;
-	char *executable;
 	char **args = parse_input(input);
 
 	if (args == NULL || args[0] == NULL)
 	{
-		free(args);
+		free_args(args);
 		return;
 	}
-	
-	for (ar = 0; args[ar] != NULL; ar++)
-	{
-		replacement = NULL;
-		if (args[ar][0] == '$')
-		{
-			char *variable_name = args[ar] + 1;
-			char *env_value = getenv(variable_name);
-			if (env_value != NULL)
-			{
-				replacement = strdup(env_value);
-			}
-		}
-		else if (strcmp(args[ar], "$?") == 0)
-		{
-			custom_asprintf(&replacement, "%d", last_exit_status);
-		}
-		else if (strcmp(args[ar], "$$") == 0)
-		{
-			custom_asprintf(&replacement, "%d", getpid());
-		}
 
-		if (replacement != NULL)
-		{
-			free(args[ar]);
-			args[ar] = replacement;
-		}
+	expand_variables(args);
+
+	if (is_builtin(args[0]))
+	{
+		execute_builtin(args, last_exit_status);
+	}
+	else
+	{
+		execute_external_command(args, envp, last_exit_status);
 	}
 
-	if (strcmp(args[0], "exit") == 0)
+	free_args(args);
+}
+
+/**
+ * execute_external_command - Execute an external command
+ *
+ * This function forks a new process to execute an external command.
+ *
+ * @args: The command and its arguments
+ * @envp: The shell's environment variables
+ * @last_exit_status: The last exit status
+ */
+void execute_external_command(char **args, char **envp, int *last_exit_status)
+{
+	pid_t child_pid;
+	int status;
+	char *executable = find_executable(args[0]);
+
+	if (executable == NULL)
 	{
-		if (args[1] != NULL)
-		{
-			int exit_status = atoi(args[1]);
-			free(args);
-			exit(exit_status);
-		}
-		else
-		{
-			free(args);
-			exit(last_exit_status);
-		}
-	}
-	else if (strcmp(args[0], "env") == 0)
-	{
-		print_environment();
-		free(args);
+		fprintf(stderr, "%s: command not found\n", args[0]);
 		return;
 	}
-	else if (strcmp(args[0], "setenv") == 0)
-	{
-		if (args[1] != NULL && args[2] != NULL && args[3] == NULL)
-		{
-			if (setenv(args[1], args[2], 1) != 0)
-			{
-				fprintf(stderr, "setenv: Unable to set environment variable\n");
-			}
-		}
-		else
-		{
-			fprintf(stderr, "usage: setenv NAME VALUE\n");
-		}
-	}
-	else if (strcmp(args[0], "unsetenv") == 0)
-	{
-		if (args[1] != NULL && args[2] == NULL)
-		{
-			if (unsetenv(args[1]) != 0)
-			{
-				fprintf(stderr, "unsetenv: Unable to unset environment variable\n");
-			}
-		}
-		else
-		{
-			fprintf(stderr, "usage: unsetenv NAME\n");
-		}
-	}
-	else if (strcmp(args[0], "cd") == 0)
-	{
-		char *new_directory = (args[1] != NULL) ? args[1] : getenv("HOME");
 
-		if (chdir(new_directory) != 0)
-		{
-			fprintf(stderr, "cd: %s: No such file or directory\n", new_directory);
-		}
-		else
-		{
-			char cwd[PATH_MAX];
-			if (getcwd(cwd, sizeof(cwd)) != NULL)
-			{
-				setenv("PWD", cwd, 1);
-			}
-		}
-	}
-	else if (strcmp(args[0], "alias") == 0)
+	child_pid = fork();
+
+	if (child_pid == -1)
 	{
-		if (args[1] == NULL)
-		{
-			size_t i;
-			for (i = 0; i < alias_count; i++)
-			{
-				printf("%s='%s'\n", aliases[i].name, aliases[i].value);
-			}
-		}
-		else
-		{
-			int i;
-			for (i = 1; args[i] != NULL; i++)
-			{
-				if (strchr(args[i], '=') != NULL)
-				{
-					char *name = strtok(args[i], "=");
-					char *value = strtok(NULL, "=");
-					size_t j;
+		perror("Error forking process");
+		exit(EXIT_FAILURE);
+	}
 
-					for (j = 0; j < alias_count; j++)
-					{
-						if (strcmp(aliases[j].name, name) == 0)
-						{
-							free(aliases[j].value);
-							aliases[j].value = strdup(value);
-							break;
-						}
-					}
-
-					if (alias_count < sizeof(aliases) / sizeof(aliases[0]))
-					{
-						aliases[alias_count].name = strdup(name);
-						aliases[alias_count].value = strdup(value);
-						alias_count++;
-					}
-					else
-					{
-						fprintf(stderr, "alias: too many aliases\n");
-					}
-				}
-				else
-				{
-					int found = 0;
-					size_t j;
-					for (j = 0; j < alias_count; j++)
-					{
-						if (strcmp(aliases[j].name, args[i]) == 0)
-						{
-							printf("%s='%s'\n", aliases[j].name, aliases[j].value);
-							found = 1;
-							break;
-						}
-					}
-					if (!found)
-					{
-						fprintf(stderr, "alias: %s not found\n", args[i]);
-					}
-				}
-			}
+	if (child_pid == 0)
+	{
+		if (execve(executable, args, envp) == -1)
+		{
+			perror(executable);
+			exit(EXIT_FAILURE);
 		}
 	}
 	else
 	{
-		char *replacement;
-		int i;
-		for (i = 0; args[i] != NULL; i++)
-		{
-			replacement = NULL;
-			if (strcmp(args[i], "$?") == 0)
-			{
-				custom_asprintf(&replacement, "%d", last_exit_status);
-			}
-			else if (strcmp(args[i], "$$") == 0)
-			{
-				custom_asprintf(&replacement, "%d", getpid());
-			}
-
-			if (replacement != NULL)
-			{
-				free(args[i]);
-				args[i] = replacement;
-			}
-		}
-
-		executable = find_executable(args[0]);
-
-		if (executable == NULL)
-		{
-			fprintf(stderr, "%s: command not found\n", args[0]);
-			free(args);
-			return;
-		}
-
-		child_pid = fork();
-
-		if (child_pid == -1)
-		{
-			perror("Error forking process");
-			exit(EXIT_FAILURE);
-		}
-
-		if (child_pid == 0)
-		{
-			if (execve(executable, args, envp) == -1)
-			{
-				perror(executable);
-				exit(EXIT_FAILURE);
-			}
-		}
-		else
-		{
-			waitpid(child_pid, &status, 0);
-			last_exit_status = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
-		}
+		waitpid(child_pid, &status, 0);
+		*last_exit_status = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
 	}
 
-	free(args);
+	free(executable);
 }
 
 /**
- * find_executable - Find the full path of an executable in the PATH.
+ * find_executable - Find the executable associated with a command
  *
- * @command: The name of the command.
+ * This function takes a command name and returns the path to the executable
+ * associated with that command. If the command name contains a '/', it is
+ * assumed to be a path to the executable. Otherwise, the function searches the
+ * directories listed in the $PATH environment variable for an executable with
+ * the given name.
  *
- * Return: The full path of the executable, or NULL if not found.
+ * @command: The command name or path
+ *
+ * Return: The path to the executable, or NULL if the command was not found
  */
 char *find_executable(char *command)
 {
-	char *path_copy, *token, *executable_path, *path;
-
-	if (command[0] == '/')
+	if (strchr(command, '/') != NULL)
 	{
-		if (access(command, X_OK) == 0)
-		{
-			return strdup(command);
-		}
-		else
-		{
-			return NULL;
-		}
+		return (access(command, X_OK) == 0 ? strdup(command) : NULL);
 	}
 
-	path = getenv("PATH");
-	path_copy = strdup(path);
-	token = strtok(path_copy, ":");
-
-	while (token != NULL)
-	{
-		executable_path = malloc(strlen(token) + strlen(command) + 2);
-		if (executable_path == NULL)
-		{
-			perror("malloc failed");
-			exit(EXIT_FAILURE);
-		}
-
-		strcpy(executable_path, token);
-		strcat(executable_path, "/");
-		strcat(executable_path, command);
-
-		if (access(executable_path, X_OK) == 0)
-		{
-			free(path_copy);
-			return executable_path;
-		}
-
-		free(executable_path);
-		token = strtok(NULL, ":");
-	}
-
-	free(path_copy);
-	return NULL;
+	return (search_path(command));
 }
 
 /**
- * custom_asprintf - The custom asprintf.
+ * search_path - Search for an executable in the PATH
  *
- * @strp: The first argument.
- * @fmt: The second argument.
- * @...: The third argument.
+ * This function searches the directories listed in the PATH environment
+ * variable for an executable with the given name.
  *
- * Return: len or -1.
+ * @command: The command name to search for
+ *
+ * Return: The full path to the executable, or NULL if not found
  */
-int custom_asprintf(char **strp, const char *fmt, ...)
+char *search_path(char *command)
 {
-	int len;
+	char *path, *path_copy, *dir, *executable;
+	size_t command_len = strlen(command);
 
-	va_list args;
-	va_start(args, fmt);
-	len = vsnprintf(NULL, 0, fmt, args);
-	va_end(args);
-
-	if (len < 0)
+	path = getenv("PATH");
+	if (path == NULL)
 	{
-		return -1;
+		return (NULL);
 	}
 
-	*strp = malloc(len + 1);
-	if (*strp == NULL)
+	path_copy = strdup(path);
+	dir = strtok(path_copy, ":");
+
+	while (dir != NULL)
 	{
-		return -1;
+		executable = construct_path(dir, command, command_len);
+		if (executable != NULL)
+		{
+			free(path_copy);
+			return (executable);
+		}
+		dir = strtok(NULL, ":");
 	}
 
-	va_start(args, fmt);
-	vsnprintf(*strp, len + 1, fmt, args);
-	va_end(args);
+	free(path_copy);
+	return (NULL);
+}
 
-	return len;
+/**
+ * construct_path - Construct a full path to a potential executable
+ *
+ * This function constructs a full path by combining a directory path
+ * and a command name, then checks if the resulting path is executable.
+ *
+ * @dir: The directory path
+ * @command: The command name
+ * @command_len: The length of the command name
+ *
+ * Return: The full path if executable, NULL otherwise
+ */
+char *construct_path(char *dir, char *command, size_t command_len)
+{
+	size_t dir_len = strlen(dir);
+	char *executable = malloc(dir_len + command_len + 2);
+
+	if (executable == NULL)
+	{
+		perror("malloc failed");
+		return (NULL);
+	}
+
+	strcpy(executable, dir);
+	strcat(executable, "/");
+	strcat(executable, command);
+
+	if (access(executable, X_OK) == 0)
+	{
+		return (executable);
+	}
+
+	free(executable);
+	return (NULL);
 }

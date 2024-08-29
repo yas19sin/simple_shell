@@ -1,9 +1,29 @@
 #include "shell.h"
 
 /**
- * read_input - Read a line of input from stdin.
+ * display_prompt - Display a prompt to the user
  *
- * Return: The input line as a string, or NULL on failure.
+ * This function displays a prompt to the user when the shell is running in
+ * interactive mode. If the shell is not running in interactive mode, this
+ * function does nothing.
+ */
+void display_prompt(void)
+{
+	if (isatty(STDIN_FILENO))
+	{
+		printf("$ ");
+		fflush(stdout);
+	}
+}
+
+/**
+ * read_input - Read a line of input from the user
+ *
+ * This function reads a line of input from the user and returns the line as a
+ * string. If the user enters an empty line, the function returns NULL.
+ *
+ * Return: The line entered by the user, or NULL if the user entered an empty
+ * line.
  */
 char *read_input(void)
 {
@@ -14,7 +34,7 @@ char *read_input(void)
 	if (characters == -1)
 	{
 		free(input);
-		return NULL;
+		return (NULL);
 	}
 
 	if (input[characters - 1] == '\n')
@@ -22,34 +42,36 @@ char *read_input(void)
 		input[characters - 1] = '\0';
 	}
 
-	return input;
+	return (input);
 }
 
 /**
- * custom_getline - Read a line of input from stdin using a static buffer.
+ * custom_getline - Read a line of input from a file
  *
- * @file: the file.
+ * This function reads a line of input from a file and returns the line as a
+ * string. If the end of the file is reached, the function returns NULL.
  *
- * Return: The input line as a string, or NULL on failure.
+ * @file: The file to read from
+ * Return: The line read from the file, or NULL if the end of the file was
+ * reached.
  */
 char *custom_getline(FILE *file)
 {
 	static char buffer[BUFFER_SIZE];
-	static ssize_t buffer_index = 0;
-	static ssize_t buffer_size = 0;
+	static size_t buffer_index;
+	static size_t buffer_size;
 	char *line = NULL;
 	size_t line_size = 0;
 
 	while (1)
 	{
-		if (buffer_index == buffer_size)
+		if (buffer_index >= buffer_size)
 		{
 			buffer_size = fread(buffer, 1, BUFFER_SIZE, file);
 			if (buffer_size == 0)
 			{
 				break;
 			}
-
 			buffer_index = 0;
 		}
 
@@ -72,112 +94,86 @@ char *custom_getline(FILE *file)
 			perror("realloc failed");
 			exit(EXIT_FAILURE);
 		}
-		line[line_size] = buffer[buffer_index];
-		line_size++;
-		buffer_index++;
+		line[line_size++] = buffer[buffer_index++];
 	}
-
-	return line;
+	return (line);
 }
 
 /**
- * display_prompt - Display the shell prompt.
- */
-void display_prompt(void)
-{
-	if (isatty(STDIN_FILENO))
-	{
-		printf("$ ");
-		fflush(stdout);
-	}
-}
-
-/**
- * parse_input - Parse the input string into an array of arguments.
+ * parse_input - Parse a line of input into individual arguments
  *
- * @input: The input string to parse.
+ * This function takes a line of input and splits it into individual arguments.
+ * It handles quoted strings and ignores everything after a '#' character.
  *
- * Return: An array of arguments (strings).
+ * @input: The line of input to parse
+ *
+ * Return: An array of strings, where each string is an argument. The last
+ * element of the array is always NULL.
  */
 char **parse_input(char *input)
 {
-	char **args = NULL;
-	int arg_count = 0;
+	char **args = NULL, *token, *saveptr;
+	int arg_count = 0, in_quotes = 0, i;
 
-	int input_length = strlen(input);
-	int token_start = -1;
-	int i;
-	int inside_quotes = 0;
-
-	for (i = 0; i <= input_length; i++)
+	for (token = strtok_r(input, " \t\n", &saveptr);
+		 token != NULL; token = strtok_r(NULL, " \t\n", &saveptr))
 	{
-		if ((input[i] == ' ' || input[i] == '\0' || input[i] == '\t' || input[i] == '\n') && !inside_quotes)
-		{
-			if (token_start != -1)
-			{
-				int token_length = i - token_start;
-				args = realloc(args, (arg_count + 1) * sizeof(char *));
-				if (args == NULL)
-				{
-					perror("realloc failed");
-					exit(EXIT_FAILURE);
-				}
-
-				args[arg_count] = malloc(token_length + 1);
-				if (args[arg_count] == NULL)
-				{
-					perror("malloc failed");
-					exit(EXIT_FAILURE);
-				}
-
-				strncpy(args[arg_count], input + token_start, token_length);
-				args[arg_count][token_length] = '\0';
-				arg_count++;
-
-				token_start = -1;
-			}
-		}
-		else if (input[i] == '\'' || input[i] == '\"')
-		{
-			inside_quotes = !inside_quotes;
-			if (token_start == -1)
-			{
-				token_start = i + 1;
-			}
-		}
-		else if (input[i] == '#' && !inside_quotes)
+		if (token[0] == '#' && !in_quotes)
 		{
 			break;
 		}
-		else if (token_start == -1)
+		for (i = 0; token[i]; i++)
 		{
-			token_start = i;
+			if (token[i] == '"')
+			{
+				in_quotes = !in_quotes;
+			}
 		}
-	}
+		args = realloc(args, (arg_count + 1) * sizeof(char *));
 
+		if (args == NULL)
+		{
+			perror("realloc failed");
+			exit(EXIT_FAILURE);
+		}
+		args[arg_count] = strdup(token);
+		if (args[arg_count] == NULL)
+		{
+			perror("strdup failed");
+			exit(EXIT_FAILURE);
+		}
+		arg_count++;
+	}
 	args = realloc(args, (arg_count + 1) * sizeof(char *));
 	if (args == NULL)
 	{
 		perror("realloc failed");
 		exit(EXIT_FAILURE);
 	}
-
 	args[arg_count] = NULL;
-
-	return args;
+	return (args);
 }
 
 /**
- * print_environment - Print the environment variables.
+ * free_args - Free the memory allocated for the arguments
+ *
+ * This function takes an array of strings as an argument and frees the memory
+ * allocated for each string in the array.
+ * It then frees the memory allocated for
+ * the array itself.
+ *
+ * @args: The array of strings to free
  */
-void print_environment(void)
+void free_args(char **args)
 {
-	extern char **environ;
-	int i = 0;
-
-	while (environ[i] != NULL)
+	if (args)
 	{
-		printf("%s\n", environ[i]);
-		i++;
+		int i;
+
+		for (i = 0; args[i]; i++)
+		{
+			free(args[i]);
+		}
+		free(args);
 	}
 }
