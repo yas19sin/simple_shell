@@ -77,7 +77,7 @@ void execute_builtin(char **args, int *last_exit_status)
 	}
 	else
 	{
-		fprintf(stderr, "Error: Command not recognized\n");
+		fprintf(stderr, "%s: command not found\n", getenv("_"));
 		*last_exit_status = 1;
 	}
 }

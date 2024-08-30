@@ -57,6 +57,11 @@ int custom_setenv(const char *name, const char *value, int overwrite)
 		return (-1);
 	}
 
+	if (putenv(env_var) != 0)
+	{
+		return (-1);
+	}
+
 	strcpy(env_var, name);
 	strcat(env_var, "=");
 	strcat(env_var, value);

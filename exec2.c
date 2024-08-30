@@ -71,7 +71,7 @@ void expand_variables(char **args)
 	{
 		if (strcmp(args[i], "$?") == 0)
 		{
-			replace_variable(&args[i], *last_exit_status_str);
+			replace_variable(&args[i], atoi(last_exit_status_str));
 		}
 		else if (strcmp(args[i], "$$") == 0)
 		{

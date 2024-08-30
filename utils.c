@@ -81,13 +81,13 @@ char *custom_getline(FILE *file)
 			if (line == NULL)
 			{
 				perror("realloc failed");
-				exit(EXIT_FAILURE);
+				free(line);
+				return (NULL);
 			}
 			line[line_size] = '\0';
 			buffer_index++;
 			break;
 		}
-
 		line = realloc(line, line_size + 1);
 		if (line == NULL)
 		{

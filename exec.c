@@ -53,7 +53,7 @@ void execute_external_command(char **args, char **envp, int *last_exit_status)
 
 	if (executable == NULL)
 	{
-		fprintf(stderr, "%s: command not found\n", args[0]);
+		fprintf(stderr, "%s: command not found\n", getenv("_"));
 		*last_exit_status = 127;
 		return;
 	}

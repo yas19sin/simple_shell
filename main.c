@@ -16,7 +16,6 @@ int main(int argc, char *argv[], char **envp)
 {
 	int last_exit_status = 0;
 
-	set_program_name(argv[0]);
 	initialize_aliases();
 
 	if (argc > 1)

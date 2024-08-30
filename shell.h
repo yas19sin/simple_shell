@@ -41,7 +41,6 @@ void replace_variable(char **arg, int value);
 void expand_env_variable(char **arg);
 char *get_last_exit_status_str(void);
 void set_last_exit_status(int status);
-void set_program_name(char *name);
 
 /* Input */
 char *read_input(void);
