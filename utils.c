@@ -1,168 +1,104 @@
 #include "shell.h"
 
 /**
- * display_prompt - Display a prompt to the user
- *
- * This function displays a prompt to the user when the shell is running in
- * interactive mode. If the shell is not running in interactive mode, this
- * function does nothing.
+ * _interactive - Returns true if the shell is in interactive mode.
+ * @info: Structure address.
+ * Return: 1 if in interactive mode, 0 otherwise.
  */
-void display_prompt(void)
+int _interactive(info_t *info)
 {
-	if (isatty(STDIN_FILENO))
+	return (isatty(STDIN_FILENO) && info->readfd <= 2);
+}
+
+/**
+ * _is_delim - Checks if a character is a delimiter.
+ * @c: The character to check.
+ * @delim: The delimiter string.
+ * Return: 1 if the character is a delimiter, 0 if not.
+ */
+int _is_delim(char c, char *delim)
+{
+	while (*delim)
 	{
-		printf("$ ");
-		fflush(stdout);
+		if (*delim++ == c)
+		{
+			return (1);
+		}
+	}
+	return (0);
+}
+
+/**
+ * _isalpha - Checks for an alphabetic character.
+ * @c: The character to check.
+ * Return: 1 if 'c' is alphabetic, 0 if not.
+ */
+int _isalpha(int c)
+{
+	if ((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'))
+	{
+		return (1);
+	}
+	else
+	{
+		return (0);
 	}
 }
 
 /**
- * read_input - Read a line of input from the user
- *
- * This function reads a line of input from the user and returns the line as a
- * string. If the user enters an empty line, the function returns NULL.
- *
- * Return: The line entered by the user, or NULL if the user entered an empty
- * line.
+ * _atoi - Converts a string to an integer.
+ * @s: The string to be converted.
+ * Return: 0 if no numbers in the string, converted number otherwise.
  */
-char *read_input(void)
+int _atoi(char *s)
 {
-	char *input = NULL;
-	size_t bufsize = 0;
-	ssize_t characters = getline(&input, &bufsize, stdin);
+	int i, sign = 1, flag = 0, output;
+	unsigned int result = 0;
 
-	if (characters == -1)
+	for (i = 0; s[i] != '\0' && flag != 2; i++)
 	{
-		free(input);
-		return (NULL);
+		if (s[i] == '-')
+		{
+			sign *= -1;
+		}
+
+		if (s[i] >= '0' && s[i] <= '9')
+		{
+			flag = 1;
+			result *= 10;
+			result += (s[i] - '0');
+		}
+		else if (flag == 1)
+		{
+			flag = 2;
+		}
 	}
 
-	if (input[characters - 1] == '\n')
+	if (sign == -1)
 	{
-		input[characters - 1] = '\0';
+		output = -result;
+	}
+	else
+	{
+		output = result;
 	}
 
-	return (input);
+	return (output);
 }
 
 /**
- * custom_getline - Read a line of input from a file
- *
- * This function reads a line of input from a file and returns the line as a
- * string. If the end of the file is reached, the function returns NULL.
- *
- * @file: The file to read from
- * Return: The line read from the file, or NULL if the end of the file was
- * reached.
+ * _myhelp - Provides help information (Not yet implemented)
+ * @info: Structure containing potential arguments. Used to maintain
+ * a constant function prototype.
+ * Return: Always 0
  */
-char *custom_getline(FILE *file)
+int _myhelp(info_t *info)
 {
-	static char buffer[BUFFER_SIZE];
-	static size_t buffer_index;
-	static size_t buffer_size;
-	char *line = NULL;
-	size_t line_size = 0;
+	char **arg_array;
 
-	while (1)
-	{
-		if (buffer_index >= buffer_size)
-		{
-			buffer_size = fread(buffer, 1, BUFFER_SIZE, file);
-			if (buffer_size == 0)
-			{
-				break;
-			}
-			buffer_index = 0;
-		}
-
-		if (buffer[buffer_index] == '\n' || buffer[buffer_index] == '\0')
-		{
-			line = realloc(line, line_size + 1);
-			if (line == NULL)
-			{
-				perror("realloc failed");
-				free(line);
-				return (NULL);
-			}
-			line[line_size] = '\0';
-			buffer_index++;
-			break;
-		}
-		line = realloc(line, line_size + 1);
-		if (line == NULL)
-		{
-			perror("realloc failed");
-			exit(EXIT_FAILURE);
-		}
-		line[line_size++] = buffer[buffer_index++];
-	}
-	return (line);
-}
-
-/**
- * parse_input - Parse a line of input into individual arguments
- *
- * This function takes a line of input and splits it into individual arguments.
- * It handles quoted strings and ignores everything after a '#' character.
- *
- * @input: The line of input to parse
- *
- * Return: An array of strings, where each string is an argument. The last
- * element of the array is always NULL.
- */
-char **parse_input(char *input)
-{
-	char **args = NULL, *arg_start = input;
-	int arg_count = 0, in_quotes = 0;
-
-	while (*input)
-	{
-		if (*input == '"')
-			in_quotes = !in_quotes;
-		else if ((*input == ' ' || *input == '\t' || *input == '\n') && !in_quotes)
-		{
-			*input = '\0';
-			if (input > arg_start)
-				args = add_arg(args, &arg_count, arg_start);
-			arg_start = input + 1;
-		}
-		else if (*input == '#' && !in_quotes)
-		{
-			*input = '\0';
-			if (input > arg_start)
-				args = add_arg(args, &arg_count, arg_start);
-			break;
-		}
-		input++;
-	}
-
-	if (input > arg_start)
-		args = add_arg(args, &arg_count, arg_start);
-	args = realloc(args, (arg_count + 1) * sizeof(char *));
-	args[arg_count] = NULL;
-	return (args);
-}
-
-/**
- * free_args - Free the memory allocated for the arguments
- *
- * This function takes an array of strings as an argument and frees the memory
- * allocated for each string in the array.
- * It then frees the memory allocated for
- * the array itself.
- *
- * @args: The array of strings to free
- */
-void free_args(char **args)
-{
-	if (args)
-	{
-		int i;
-
-		for (i = 0; args[i]; i++)
-		{
-			free(args[i]);
-		}
-		free(args);
-	}
+	arg_array = info->argv;
+	_puts("help call works. Function not yet implemented\n");
+	if (0)
+		_puts(*arg_array); /* Temp attribute_unused workaround */
+	return (0);
 }

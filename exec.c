@@ -1,182 +1,160 @@
 #include "shell.h"
 
 /**
- * execute_command - Execute a command
- *
- * This function is called by the shell when a command is read from the user.
- * It parses the command, checks if it is a built-in command and if not, forks
- * a new process to execute the command.
- *
- * @input: The command to execute
- * @envp: The shell's environment variables
- * @last_exit_status: The last exit status
+ * _unsetenv - Remove an environment variable.
+ * @info: Structure containing potential arguments. Used to maintain a
+ * constant function prototype.
+ * @var: The string environment variable property.
+ * Return: 1 on delete, 0 otherwise.
  */
-void execute_command(char *input, char **envp, int *last_exit_status)
+int _unsetenv(info_t *info, char *var)
 {
-	char **args = parse_input(input);
+	list_t *node = info->env;
+	size_t i = 0;
+	char *p;
 
-	if (args == NULL || args[0] == NULL)
+	if (!node || !var)
 	{
-		free_args(args);
-		return;
+		return (0);
 	}
 
-	expand_variables(args);
-	handle_aliases(args);
-
-	if (is_builtin(args[0]))
+	while (node)
 	{
-		execute_builtin(args, last_exit_status);
-	}
-	else
-	{
-		execute_external_command(args, envp, last_exit_status);
-	}
-
-	free_args(args);
-}
-
-/**
- * execute_external_command - Execute an external command
- *
- * This function forks a new process to execute an external command.
- *
- * @args: The command and its arguments
- * @envp: The shell's environment variables
- * @last_exit_status: The last exit status
- */
-void execute_external_command(char **args, char **envp, int *last_exit_status)
-{
-	pid_t child_pid;
-	int status;
-	char *executable = find_executable(args[0]);
-
-	if (executable == NULL)
-	{
-		fprintf(stderr, "%s: %s: command not found\n", getenv("_"), args[0]);
-		*last_exit_status = 127;
-		return;
-	}
-
-	child_pid = fork();
-
-	if (child_pid == -1)
-	{
-		perror("Error forking process");
-		exit(EXIT_FAILURE);
-	}
-
-	if (child_pid == 0)
-	{
-		if (execve(executable, args, envp) == -1)
+		p = _starts_with(node->str, var);
+		if (p && *p == '=')
 		{
-			perror(executable);
-			exit(EXIT_FAILURE);
+			info->env_changed = _delete_node_at_index(&(info->env), i);
+			i = 0;
+			node = info->env;
+			continue;
 		}
-	}
-	else
-	{
-		waitpid(child_pid, &status, 0);
-		*last_exit_status = WIFEXITED(status) ? WEXITSTATUS(status) : 1;
+		node = node->next;
+		i++;
 	}
 
-	free(executable);
+	return (info->env_changed);
 }
 
 /**
- * find_executable - Find the executable associated with a command
- *
- * This function takes a command name and returns the path to the executable
- * associated with that command. If the command name contains a '/', it is
- * assumed to be a path to the executable. Otherwise, the function searches the
- * directories listed in the $PATH environment variable for an executable with
- * the given name.
- *
- * @command: The command name or path
- *
- * Return: The path to the executable, or NULL if the command was not found
+ * _setenv - Initialize a new environment
+ * variable, or modify an existing one.
+ * @info: Structure containing potential arguments.
+ * Used to maintain a constant
+ * function prototype.
+ * @var: The string environment variable property.
+ * @value: The string environment variable value.
+ * Return: Always 0.
  */
-char *find_executable(char *command)
+int _setenv(info_t *info, char *var, char *value)
 {
-	if (strchr(command, '/') != NULL)
+	char *buf = NULL;
+	list_t *node;
+	char *p;
+
+	if (!var || !value)
 	{
-		return (access(command, X_OK) == 0 ? strdup(command) : NULL);
+		return (0);
 	}
 
-	return (search_path(command));
-}
-
-/**
- * search_path - Search for an executable in the PATH
- *
- * This function searches the directories listed in the PATH environment
- * variable for an executable with the given name.
- *
- * @command: The command name to search for
- *
- * Return: The full path to the executable, or NULL if not found
- */
-char *search_path(char *command)
-{
-	char *path, *path_copy, *dir, *executable;
-	size_t command_len = strlen(command);
-
-	path = getenv("PATH");
-	if (path == NULL)
+	buf = malloc(_strlen(var) + _strlen(value) + 2);
+	if (!buf)
 	{
-		return (NULL);
+		return (1);
 	}
 
-	path_copy = strdup(path);
-	dir = strtok(path_copy, ":");
+	_strcpy(buf, var);
+	_strcat(buf, "=");
+	_strcat(buf, value);
+	node = info->env;
 
-	while (dir != NULL)
+	while (node)
 	{
-		executable = construct_path(dir, command, command_len);
-		if (executable != NULL)
+		p = _starts_with(node->str, var);
+		if (p && *p == '=')
 		{
-			free(path_copy);
-			return (executable);
+			free(node->str);
+			node->str = buf;
+			info->env_changed = 1;
+			return (0);
 		}
-		dir = strtok(NULL, ":");
+		node = node->next;
 	}
 
-	free(path_copy);
-	return (NULL);
+	_add_node_end(&(info->env), buf, 0);
+	free(buf);
+	info->env_changed = 1;
+
+	return (0);
 }
 
 /**
- * construct_path - Construct a full path to a potential executable
- *
- * This function constructs a full path by combining a directory path
- * and a command name, then checks if the resulting path is executable.
- *
- * @dir: The directory path
- * @command: The command name
- * @command_len: The length of the command name
- *
- * Return: The full path if executable, NULL otherwise
+ * _clear_info - Initializes info_t struct.
+ * @info: Struct address.
  */
-char *construct_path(char *dir, char *command, size_t command_len)
+void _clear_info(info_t *info)
 {
-	size_t dir_len = strlen(dir);
-	char *executable = malloc(dir_len + command_len + 2);
+	info->arg = NULL;
+	info->argv = NULL;
+	info->path = NULL;
+	info->argc = 0;
+}
 
-	if (executable == NULL)
+/**
+ * _set_info - Initializes info_t struct.
+ * @info: Struct address.
+ * @av: Argument vector.
+ */
+void _set_info(info_t *info, char **av)
+{
+	int i = 0;
+
+	info->fname = av[0];
+	if (info->arg)
 	{
-		perror("malloc failed");
-		return (NULL);
+		info->argv = _strtow(info->arg, " \t");
+		if (!info->argv)
+		{
+			info->argv = malloc(sizeof(char *) * 2);
+			if (info->argv)
+			{
+				info->argv[0] = _strdup(info->arg);
+				info->argv[1] = NULL;
+			}
+		}
+		for (i = 0; info->argv && info->argv[i]; i++)
+			;
+		info->argc = i;
+
+		_replace_alias(info);
+		_replace_vars(info);
 	}
+}
 
-	strcpy(executable, dir);
-	strcat(executable, "/");
-	strcat(executable, command);
-
-	if (access(executable, X_OK) == 0)
+/**
+ * _free_info - Frees info_t struct fields.
+ * @info: Struct address.
+ * @all: True if freeing all fields.
+ */
+void _free_info(info_t *info, int all)
+{
+	_ffree(info->argv);
+	info->argv = NULL;
+	info->path = NULL;
+	if (all)
 	{
-		return (executable);
+		if (!info->cmd_buf)
+			free(info->arg);
+		if (info->env)
+			_free_list(&(info->env));
+		if (info->history)
+			_free_list(&(info->history));
+		if (info->alias)
+			_free_list(&(info->alias));
+		_ffree(info->environ);
+		info->environ = NULL;
+		_bfree((void **)info->cmd_buf);
+		if (info->readfd > 2)
+			close(info->readfd);
+		_putchar(BUF_FLUSH);
 	}
-
-	free(executable);
-	return (NULL);
 }

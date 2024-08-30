@@ -1,129 +1,116 @@
 #include "shell.h"
 
-static size_t alias_count;
-static Alias aliases[MAX_ALIASES];
-
 /**
- * print_aliases - Print all aliases
- * @aliases: Array of aliases
- * @alias_count: Number of aliases
+ * _print_alias - Prints an alias string.
+ * @node: The alias node.
+ * Return: Always 0 on success, 1 on error.
  */
-void print_aliases(Alias *aliases, size_t alias_count)
+int _print_alias(list_t *node)
 {
-	size_t i;
+	char *p = NULL, *a = NULL;
 
-	for (i = 0; i < alias_count; i++)
+	if (node)
 	{
-		printf("%s='%s'\n", aliases[i].name,
-			   aliases[i].value);
+		p = _strchr(node->str, '=');
+		for (a = node->str; a <= p; a++)
+		{
+			_putchar(*a);
+		}
+		_putchar('\'');
+		_puts(p + 1);
+		_puts("'\n");
+		return (0);
 	}
+	return (1);
 }
 
 /**
- * set_alias - Set or update an alias
- * @aliases: Array of aliases
- * @alias_count: Pointer to the number of aliases
- * @name: Name of the alias
- * @value: Value of the alias
+ * _myalias - Mimics the alias builtin (man alias).
+ * @info: Structure containing potential arguments. Used to maintain
+ * a constant function prototype.
+ * Return: Always 0.
  */
-void set_alias(Alias *aliases, size_t *alias_count,
-			   char *name, char *value)
+int _myalias(info_t *info)
 {
-	size_t i;
+	int i = 0;
+	char *p = NULL;
+	list_t *node = NULL;
 
-	for (i = 0; i < *alias_count; i++)
+	if (info->argc == 1)
 	{
-		if (strcmp(aliases[i].name, name) == 0)
+		node = info->alias;
+		while (node)
 		{
-			free(aliases[i].value);
-			aliases[i].value = strdup(value);
-			return;
+			_print_alias(node);
+			node = node->next;
+		}
+		return (0);
+	}
+	for (i = 1; info->argv[i]; i++)
+	{
+		p = _strchr(info->argv[i], '=');
+		if (p)
+		{
+			_set_alias(info, info->argv[i]);
+		}
+		else
+		{
+			_print_alias(_node_starts_with(info->alias, info->argv[i],
+										   '='));
 		}
 	}
 
-	if (*alias_count < MAX_ALIASES)
-	{
-		aliases[*alias_count].name = strdup(name);
-		aliases[*alias_count].value = strdup(value);
-		(*alias_count)++;
-	}
+	return (0);
 }
 
 /**
- * print_specific_alias - Print a specific alias
- * @aliases: Array of aliases
- * @alias_count: Number of aliases
- * @name: Name of the alias to print
+ * _myenv - Prints the current environment.
+ * @info: Structure containing potential arguments. Used to maintain
+ *        constant function prototype.
+ * Return: Always 0.
  */
-void print_specific_alias(Alias *aliases,
-						  size_t alias_count, char *name)
+int _myenv(info_t *info)
 {
-	size_t i;
-
-	for (i = 0; i < alias_count; i++)
-	{
-		if (strcmp(aliases[i].name, name) == 0)
-		{
-			printf("%s='%s'\n", aliases[i].name,
-				   aliases[i].value);
-			return;
-		}
-	}
-
-	fprintf(stderr, "alias: %s not found\n", name);
+	_print_list_str(info->env);
+	return (0);
 }
 
 /**
- * handle_alias_builtin - Handle the alias command
- * @args: The arguments to the alias command
+ * _getenv - Gets the value of an environ variable.
+ * @info: Structure containing potential arguments. Used to maintain
+ * @name: Env var name.
+ * Return: The value.
  */
-void handle_alias_builtin(char **args)
+char *_getenv(info_t *info, const char *name)
 {
-	if (args[1] == NULL)
-	{
-		print_aliases(aliases, alias_count);
-	}
-	else
-	{
-		int i;
+	list_t *node = info->env;
+	char *p;
 
-		for (i = 1; args[i]; i++)
-		{
-			char *name = strtok(args[i], "=");
-			char *value = strtok(NULL, "");
-
-			if (value)
-			{
-				set_alias(aliases, &alias_count,
-						  name, value);
-			}
-			else
-			{
-				print_specific_alias(aliases,
-									 alias_count,
-									 name);
-			}
-		}
+	while (node)
+	{
+		p = _starts_with(node->str, name);
+		if (p && *p)
+			return (p);
+		node = node->next;
 	}
+	return (NULL);
 }
 
 /**
- * print_help - Print help for a command
- * @args: The command and its arguments
- *
- * This function prints help for a command if it is a built-in command and
- * if the command has a help message defined. If the command is not a built-in
- * command or it does not have a help message, it prints the shell's help
- * message.
+ * _mysetenv - Initializes a new environment variable
+ * or modifies an existing one.
+ * @info: Structure containing potential arguments. Used to maintain
+ *        constant function prototype.
+ * Return: Always 0.
  */
-void print_help(char **args)
+int _mysetenv(info_t *info)
 {
-	if (args[1] == NULL)
+	if (info->argc != 3)
 	{
-		print_general_help();
+		_eputs("Incorrect number of arguments\n");
+		return (1);
 	}
-	else
-	{
-		print_command_help(args[1]);
-	}
+	if (_setenv(info, info->argv[1], info->argv[2]))
+		return (0);
+	return (1);
 }

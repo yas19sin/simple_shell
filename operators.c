@@ -1,118 +1,137 @@
 #include "shell.h"
 
 /**
- * handle_logical_operators - Handle logical operators (&& and ||)
- *
- * This function handles logical operators in the input. It tokenizes the
- * input by the logical operators and executes the commands on either side of
- * the operator. If the operator is &&, the second command is only executed if
- * the first command's exit status is 0. If the operator is ||, the second
- * command is only executed if the first command's exit status is not 0.
- *
- * @input: The command line input with logical operators
- * @envp: The environment variables
- * @last_exit_status: Pointer to the last exit status
- *
- * Return: The exit status of the last command executed
+ * _putsfd - Prints an input string to the specified file descriptor.
+ * @str: The string to be printed.
+ * @fd: The file descriptor to write to.
+ * Return: The number of characters written.
  */
-int handle_logical_operators(char *input, char **envp, int *last_exit_status)
+int _putsfd(char *str, int fd)
 {
-	char *token, *saveptr;
-	int prev_status = 0;
-	int operators = 0; /* 0: none, 1: &&, 2: || */
+	int i = 0;
 
-	token = strtok_r(input, "&|", &saveptr);
-	while (token != NULL)
+	if (!str)
 	{
-		char *trimmed = token;
+		return (0);
+	}
 
-		while (*trimmed == ' ')
-			trimmed++;
+	while (*str)
+	{
+		i += _putfd(*str++, fd);
+	}
 
-		if (operators == 0 ||
-			(operators == 1 && prev_status == 0) ||
-			(operators == 2 && prev_status != 0))
-		{
-			execute_command(trimmed, envp, last_exit_status);
-			prev_status = *last_exit_status;
-		}
+	return (i);
+}
 
-		if (saveptr[0] == '&' && saveptr[1] == '&')
+/**
+ * _erratoi - Converts a string to an integer
+ * @s: The string to be converted
+ * Return: The converted number if successful, -1 on error
+ */
+int _erratoi(char *s)
+{
+	int i = 0;
+	unsigned long int result = 0;
+
+	if (*s == '+')
+		s++;
+	for (i = 0; s[i] != '\0'; i++)
+	{
+		if (s[i] >= '0' && s[i] <= '9')
 		{
-			operators = 1;
-			saveptr += 2;
-		}
-		else if (saveptr[0] == '|' && saveptr[1] == '|')
-		{
-			operators = 2;
-			saveptr += 2;
+			result *= 10;
+			result += (s[i] - '0');
+			if (result > INT_MAX)
+				return (-1);
 		}
 		else
+			return (-1);
+	}
+	return (result);
+}
+
+/**
+ * _print_error - Prints an error message
+ * @info: The parameter & return info struct
+ * @estr: String containing the specified error type
+ * Return: Nothing
+ */
+void _print_error(info_t *info, char *estr)
+{
+	_eputs(info->fname);
+	_eputs(": ");
+	_print_d(info->line_count, STDERR_FILENO);
+	_eputs(": ");
+	_eputs(info->argv[0]);
+	_eputs(": ");
+	_eputs(estr);
+}
+
+/**
+ * _print_d - Prints a decimal (integer) number (base 10)
+ * @input: The input
+ * @fd: The file descriptor to write to
+ * Return: Number of characters printed
+ */
+int _print_d(int input, int fd)
+{
+	int (*__putchar)(char) = _eputchar;
+	int i, count = 0;
+	unsigned int _abs_, current;
+
+	if (fd == STDERR_FILENO)
+		__putchar = _eputchar;
+	if (input < 0)
+	{
+		_abs_ = -input;
+		__putchar('-');
+		count++;
+	}
+	else
+		_abs_ = input;
+	current = _abs_;
+	for (i = 1000000000; i > 1; i /= 10)
+	{
+		if (_abs_ / i)
 		{
-			operators = 0;
+			__putchar('0' + current / i);
+			count++;
 		}
-
-		token = strtok_r(NULL, "&|", &saveptr);
+		current %= i;
 	}
-
-	return (prev_status);
+	__putchar('0' + current);
+	count++;
+	return (count);
 }
 
 /**
- * handle_command_separators - Handle command separators (&&, ||, and ;)
- *
- * This function handles command separators in the input. It tokenizes the
- * input by the command separators and executes the commands on either side of
- * the separator. If the separator is &&, the second command is only executed
- * if the first command's exit status is 0. If the separator is ||, the second
- * command is only executed if the first command's exit status is not 0. If the
- * separator is ;, the second command is always executed.
- *
- * @input: The command line input with logical operators
- * @envp: The environment variables
- * @last_exit_status: Pointer to the last exit status
+ * _convert_number - Converts a number to a string
+ * @num: The number
+ * @base: The base
+ * @flags: Argument flags
+ * Return: The converted string
  */
-void handle_command_separators(char *input, char **envp, int *last_exit_status)
+char *_convert_number(long int num, int base, int flags)
 {
-	char *token, *saveptr;
+	static char *array;
+	static char buffer[50];
+	char sign = 0;
+	char *ptr;
+	unsigned long n = num;
 
-	token = strtok_r(input, ";", &saveptr);
-
-	while (token != NULL)
+	if (!(flags & CONVERT_UNSIGNED) && num < 0)
 	{
-		char *trimmed = token;
-
-		while (*trimmed == ' ')
-			trimmed++;
-
-		handle_logical_operators(trimmed, envp, last_exit_status);
-
-		token = strtok_r(NULL, ";", &saveptr);
+		n = -num;
+		sign = '-';
 	}
-}
-
-/**
- * add_arg - Add an argument to the argument list
- * @args: The argument list
- * @arg_count: The number of arguments
- * @arg_start: The start of the argument
- *
- * Return: The updated argument list
- */
-char **add_arg(char **args, int *arg_count, char *arg_start)
-{
-	args = realloc(args, (*arg_count + 1) * sizeof(char *));
-	if (!args)
-	{
-		perror("realloc failed");
-		exit(EXIT_FAILURE);
-	}
-	args[*arg_count] = strdup(arg_start);
-	if (!args[*arg_count])
-	{
-		perror("strdup failed");
-		exit(EXIT_FAILURE);
-	}
-	(*arg_count)++;
-	return (args);
+	array = flags & CONVERT_LOWERCASE ? "0123456789abcdef" : "0123456789ABCDEF";
+	ptr = &buffer[49];
+	*ptr = '\0';
+	do {
+		*--ptr = array[n % base];
+		n /= base;
+	} while (n != 0);
+	if (sign)
+		*--ptr = sign;
+	return (ptr);
 }

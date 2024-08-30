@@ -1,76 +1,111 @@
 #include "shell.h"
 
-static size_t alias_count;
-static Alias aliases[MAX_ALIASES];
+/**
+ * _myunsetenv - Removes an environment variable.
+ * @info: Structure containing potential arguments. Used to maintain
+ * constant function prototype.
+ * Return: Always 0.
+ */
+int _myunsetenv(info_t *info)
+{
+	int i;
 
-static int last_exit_status;
+	if (info->argc == 1)
+	{
+		_eputs("Too few arguments.\n");
+		return (1);
+	}
+	for (i = 1; i <= info->argc; i++)
+		_unsetenv(info, info->argv[i]);
+
+	return (0);
+}
 
 /**
- * handle_aliases - Handle aliases in command arguments
- * @args: The command arguments
+ * populate_env_list - Populates env linked list.
+ * @info: Structure containing potential arguments. Used to maintain
+ *                            constant function prototype.
+ * Return: Always 0.
  */
-void handle_aliases(char **args)
+int populate_env_list(info_t *info)
 {
+	list_t *node = NULL;
 	size_t i;
 
-	if (args[0] == NULL)
+	for (i = 0; environ[i]; i++)
+		_add_node_end(&node, environ[i], 0);
+	info->env = node;
+	return (0);
+}
+
+/**
+ * _eputs - Prints an input string to stderr.
+ * @str: The string to be printed.
+ * Return: Nothing.
+ */
+void _eputs(char *str)
+{
+	int i = 0;
+
+	if (!str)
 	{
 		return;
 	}
 
-	for (i = 0; i < alias_count; i++)
+	while (str[i] != '\0')
 	{
-		if (strcmp(args[0], aliases[i].name) == 0)
-		{
-			char **new_args = parse_input(aliases[i].value);
-			int j = 1;
-
-			free(args[0]);
-			args[0] = strdup(new_args[0]);
-			while (new_args[j])
-			{
-				args[j] = strdup(new_args[j]);
-				j++;
-			}
-			args[j] = NULL;
-			free_args(new_args);
-			break;
-		}
+		_eputchar(str[i]);
+		i++;
 	}
 }
 
 /**
- * initialize_aliases - Initialize aliases
+ * _eputchar - Writes the character 'c' to stderr.
+ * @c: The character to print.
+ * Return: On success 1. On error, -1 is returned,
+ * and errno is set appropriately.
  */
-void initialize_aliases(void)
+int _eputchar(char c)
 {
-	alias_count = 0;
-}
+	static int i;
+	static char buf[_WRITE_BUFFER_SIZE];
 
-/**
- * get_last_exit_status_str - Gets the last exit status as a string
- *
- * Return: The last exit status as a string
- */
-char *get_last_exit_status_str(void)
-{
-	char *status_str;
-
-	status_str = malloc(12); /* Max size of an int as string + null terminator */
-	if (status_str == NULL)
+	if (c == BUF_FLUSH || i >= _WRITE_BUFFER_SIZE)
 	{
-		perror("malloc failed");
-		exit(EXIT_FAILURE);
+		write(2, buf, i);
+		i = 0;
 	}
-	snprintf(status_str, 12, "%d", last_exit_status);
-	return (status_str);
+
+	if (c != BUF_FLUSH)
+	{
+		buf[i++] = c;
+	}
+
+	return (1);
 }
 
 /**
- * set_last_exit_status - Sets the last exit status
- * @status: The exit status
+ * _putfd - Writes the character 'c' to the given file descriptor.
+ * @c: The character to print.
+ * @fd: The file descriptor to write to.
+ * Return: On success 1. On error, -1 is returned,
+ * and errno is set appropriately.
  */
-void set_last_exit_status(int status)
+int _putfd(char c, int fd)
 {
-	last_exit_status = status;
+	static int i;
+	static char buf[_WRITE_BUFFER_SIZE];
+
+	if (c == BUF_FLUSH || i >= _WRITE_BUFFER_SIZE)
+	{
+		write(fd, buf, i);
+		i = 0;
+	}
+
+	if (c != BUF_FLUSH)
+	{
+		buf[i++] = c;
+	}
+
+	return (1);
 }

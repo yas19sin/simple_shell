@@ -1,118 +1,146 @@
 #include "shell.h"
 
 /**
- * handle_cd - Handle the cd builtin command
- *
- * @args: The command arguments
- * @last_exit_status: Pointer to the last exit status
+ * _get_history_file - Gets the history file.
+ * @info: Parameter struct.
+ * Return: Allocated string containing history file.
  */
-void handle_cd(char **args, int *last_exit_status)
+char *_get_history_file(info_t *info)
 {
-	char *target_dir;
-	char cwd[PATH_MAX];
+	char *buf, *dir;
 
-	if (args[1] == NULL || strcmp(args[1], "~") == 0)
-	{
-		target_dir = getenv("HOME");
-	}
-	else if (strcmp(args[1], "-") == 0)
-	{
-		target_dir = getenv("OLDPWD");
-		if (target_dir == NULL)
-		{
-			fprintf(stderr, "cd: OLDPWD not set\n");
-			*last_exit_status = 1;
-			return;
-		}
-		printf("%s\n", target_dir);
-	}
-	else
-	{
-		target_dir = args[1];
-	}
+	dir = _getenv(info, "HOME=");
+	if (!dir)
+		return (NULL);
 
-	if (chdir(target_dir) != 0)
-	{
-		perror("cd");
-		*last_exit_status = 1;
-		return;
-	}
+	buf = malloc(_strlen(dir) + _strlen(HISTORY_FILE) + 2);
+	if (!buf)
+		return (NULL);
 
-	if (getcwd(cwd, sizeof(cwd)) == NULL)
-	{
-		perror("getcwd");
-		*last_exit_status = 1;
-		return;
-	}
+	buf[0] = 0;
+	_strcpy(buf, dir);
+	_strcat(buf, "/");
+	_strcat(buf, HISTORY_FILE);
 
-	custom_setenv("OLDPWD", getenv("PWD"), 1);
-	custom_setenv("PWD", cwd, 1);
-	*last_exit_status = 0;
+	return (buf);
 }
 
 /**
- * expand_variables - Expand variables in an array of strings
- *
- * This function iterates over an array of strings and if it finds a string
- * that is equal to "$?" or "$$", it replaces it with the current exit status
- * or the current process id respectively.
- * It also expands environment variables.
- *
- * @args: The array of strings to expand
+ * _write_history - Creates a file or appends to an existing file.
+ * @info: The parameter struct.
+ * Return: 1 on success, else -1.
  */
-void expand_variables(char **args)
+int _write_history(info_t *info)
 {
-	int i;
-	char *last_exit_status_str;
+	ssize_t fd;
+	char *filename = _get_history_file(info);
+	list_t *node = NULL;
 
-	last_exit_status_str = get_last_exit_status_str();
+	if (!filename)
+		return (-1);
 
-	for (i = 0; args[i] != NULL; i++)
+	fd = open(filename, O_CREAT | O_TRUNC | O_RDWR, 0644);
+	free(filename);
+
+	if (fd == -1)
+		return (-1);
+
+	for (node = info->history; node; node = node->next)
 	{
-		if (strcmp(args[i], "$?") == 0)
-		{
-			replace_variable(&args[i], atoi(last_exit_status_str));
-		}
-		else if (strcmp(args[i], "$$") == 0)
-		{
-			replace_variable(&args[i], getpid());
-		}
-		else if (args[i][0] == '$')
-		{
-			expand_env_variable(&args[i]);
-		}
+		_putsfd(node->str, fd);
+		_putfd('\n', fd);
 	}
 
-	free(last_exit_status_str);
+	_putfd(BUF_FLUSH, fd);
+	close(fd);
+
+	return (1);
 }
 
 /**
- * replace_variable - Replace a variable with its integer value
- *
- * @arg: Pointer to the argument to replace
- * @value: The integer value to replace with
+ * read_history - Reads history from a file.
+ * @info: The parameter struct.
+ * Return: Histcount on success, 0 otherwise.
  */
-void replace_variable(char **arg, int value)
+int read_history(info_t *info)
 {
-	char value_str[12]; /* Max size of an int as string + null terminator */
+	int i, last = 0, linecount = 0;
+	ssize_t fd, rdlen, fsize = 0;
+	struct stat st;
+	char *buf = NULL, *filename = _get_history_file(info);
 
-	snprintf(value_str, sizeof(value_str), "%d", value);
-	free(*arg);
-	*arg = strdup(value_str);
+	if (!filename)
+		return (0);
+	fd = open(filename, O_RDONLY);
+	free(filename);
+	if (fd == -1)
+		return (0);
+	if (!fstat(fd, &st))
+		fsize = st.st_size;
+	if (fsize < 2)
+		return (0);
+	buf = malloc(sizeof(char) * (fsize + 1));
+	if (!buf)
+		return (0);
+	rdlen = read(fd, buf, fsize);
+	buf[fsize] = 0;
+	if (rdlen <= 0)
+		return (free(buf), 0);
+	close(fd);
+	for (i = 0; i < fsize; i++)
+		if (buf[i] == '\n')
+		{
+			buf[i] = 0;
+			_build_history_list(info, buf + last, linecount++);
+			last = i + 1;
+		}
+	if (last != i)
+		_build_history_list(info, buf + last, linecount++);
+	free(buf);
+	info->histcount = linecount;
+	while (info->histcount-- >= HISTORY_MAX)
+		_delete_node_at_index(&(info->history), 0);
+	_renumber_history(info);
+	return (info->histcount);
 }
 
 /**
- * expand_env_variable - Expand an environment variable
- *
- * @arg: Pointer to the argument to expand
+ * _build_history_list - Adds an entry to a history linked list.
+ * @info: Parameter struct.
+ * @buf: Buffer.
+ * @linecount: The history line count, histcount.
+ * Return: Always 0.
  */
-void expand_env_variable(char **arg)
+int _build_history_list(info_t *info, char *buf, int linecount)
 {
-	char *env_value = getenv(*arg + 1);
+	list_t *node = NULL;
 
-	if (env_value != NULL)
+	if (info->history)
+		node = info->history;
+
+	_add_node_end(&node, buf, linecount);
+
+	if (!info->history)
+		info->history = node;
+
+	return (0);
+}
+
+/**
+ * _renumber_history - Renumbers the history linked list after changes.
+ * @info: Parameter struct.
+ * Return: The new histcount.
+ */
+int _renumber_history(info_t *info)
+{
+	list_t *node = info->history;
+	int i = 0;
+
+	while (node)
 	{
-		free(*arg);
-		*arg = strdup(env_value);
+		node->num = i++;
+		node = node->next;
 	}
+
+	return (info->histcount = i);
 }

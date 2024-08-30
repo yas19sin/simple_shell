@@ -1,164 +1,165 @@
 #include "shell.h"
 
 /**
- * is_builtin - Check if a command is a shell builtin
- *
- * This function takes a command name as an argument and checks if it is a
- * shell builtin. If the command is a builtin, the function returns 1,
- * otherwise it returns 0.
- *
- * @command: The command name to check
- * Return: 1 if the command is a builtin, 0 otherwise
+ * _input_buf - Buffers chained commands.
+ * @info: Parameter struct.
+ * @buf: Address of the buffer.
+ * @len: Address of the len variable.
+ * Return: Bytes read.
  */
-int is_builtin(char *command)
+ssize_t _input_buf(info_t *info, char **buf, size_t *len)
 {
-	char *builtins[] = {
-		"exit",
-		"env",
-		"setenv",
-		"unsetenv",
-		"cd",
-		"alias",
-		"help",
-		NULL};
-	int i;
+	ssize_t r = 0;
+	size_t len_p = 0;
 
-	for (i = 0; builtins[i]; i++)
+	if (!*len) /* If nothing left in the buffer, fill it */
 	{
-		if (strcmp(command, builtins[i]) == 0)
+		/*bfree((void **)info->cmd_buf);*/
+		free(*buf);
+		*buf = NULL;
+		signal(SIGINT, _sigintHandler);
+#if USE_GETLINE
+		r = getline(buf, &len_p, stdin);
+#else
+		r = _getline(info, buf, &len_p);
+#endif
+		if (r > 0)
 		{
-			return (1);
+			if ((*buf)[r - 1] == '\n')
+			{
+				(*buf)[r - 1] = '\0'; /* Remove trailing newline */
+				r--;
+			}
+			info->linecount_flag = 1;
+			_remove_comments(*buf);
+			_build_history_list(info, *buf, info->histcount++);
+			/* If (_strchr(*buf, ';')) Is this a command chain? */
+			{
+				*len = r;
+				info->cmd_buf = buf;
+			}
 		}
 	}
-	return (0);
+	return (r);
 }
 
 /**
- * execute_builtin - Execute a built-in command
- *
- * This function is called when the user's command is a built-in command. It
- * calls the appropriate function to handle the command.
- *
- * @args: The arguments passed to the command
- * @last_exit_status: Pointer to the last exit status
+ * _get_input - Gets a line minus the newline.
+ * @info: Parameter struct.
+ * Return: Bytes read.
  */
-void execute_builtin(char **args, int *last_exit_status)
+ssize_t _get_input(info_t *info)
 {
-	if (strcmp(args[0], "exit") == 0)
-	{
-		handle_exit(args, last_exit_status);
-	}
-	else if (strcmp(args[0], "env") == 0)
-	{
-		print_environment();
-		*last_exit_status = 0;
-	}
-	else if (strcmp(args[0], "setenv") == 0)
-	{
-		handle_setenv(args, last_exit_status);
-	}
-	else if (strcmp(args[0], "unsetenv") == 0)
-	{
-		handle_unsetenv(args, last_exit_status);
-	}
-	else if (strcmp(args[0], "cd") == 0)
-	{
-		handle_cd(args, last_exit_status);
-	}
-	else if (strcmp(args[0], "alias") == 0)
-	{
-		handle_alias_builtin(args);
-		*last_exit_status = 0;
-	}
-	else if (strcmp(args[0], "help") == 0)
-	{
-		print_help(args);
-		*last_exit_status = 0;
-	}
-	else
-	{
-		fprintf(stderr, "%s: command not found\n", getenv("_"));
-		*last_exit_status = 1;
-	}
-}
+	static char *buf; /* The ';' command chain buffer */
+	static size_t i, j, len;
+	ssize_t r = 0;
+	char **buf_p = &(info->arg), *p;
 
-/**
- * handle_exit - Handle the exit builtin command
- *
- * @args: The command arguments
- * @last_exit_status: Pointer to the last exit status
- */
-void handle_exit(char **args, int *last_exit_status)
-{
-	int status = 0;
-
-	if (args[1] != NULL)
+	_putchar(BUF_FLUSH);
+	r = _input_buf(info, &buf, &len);
+	if (r == -1) /* EOF */
+		return (-1);
+	if (len) /* We have commands left in the chain buffer */
 	{
-		char *endptr;
-		long int num = strtol(args[1], &endptr, 10);
+		j = i;		 /* Initialize a new iterator to the current buf position */
+		p = buf + i; /* Get a pointer for return */
 
-		if (*endptr != '\0' || num > INT_MAX || num < INT_MIN)
+		_check_chain(info, buf, &j, i, len);
+		while (j < len) /* Iterate to semicolon or end */
 		{
-			fprintf(stderr, "exit: Illegal number: %s\n", args[1]);
-			*last_exit_status = 2;
-			return;
+			if (_is_chain(info, buf, &j))
+				break;
+			j++;
 		}
 
-		status = (int)num;
+		i = j + 1;	  /* Increment past nulled ';'' */
+		if (i >= len) /* Reached the end of the buffer? */
+		{
+			i = len = 0; /* Reset position and length */
+			info->cmd_buf_type = CMD_NORMAL;
+		}
+
+		*buf_p = p;			 /* Pass back a pointer to the current command position */
+		return (_strlen(p)); /* Return the length of the current command */
 	}
 
-	*last_exit_status = status;
-	exit(*last_exit_status);
+	*buf_p = buf; /* Else, not a chain, info_ts back the buffer from _getline() */
+	return (r);	  /* Return the length of the buffer from _getline() */
 }
 
 /**
- * handle_setenv - Handle the setenv builtin command
- *
- * @args: The command arguments
- * @last_exit_status: Pointer to the last exit status
+ * _read_buf - Reads a buffer.
+ * @info: Parameter struct.
+ * @buf: Buffer.
+ * @i: Size.
+ * Return: r.
  */
-void handle_setenv(char **args, int *last_exit_status)
+ssize_t _read_buf(info_t *info, char *buf, size_t *i)
 {
-	if (args[1] == NULL || args[2] == NULL)
-	{
-		fprintf(stderr, "Usage: setenv VARIABLE VALUE\n");
-		*last_exit_status = 1;
-		return;
-	}
+	ssize_t r = 0;
 
-	if (custom_setenv(args[1], args[2], 1) != 0)
-	{
-		perror("setenv");
-		*last_exit_status = 1;
-	}
-	else
-	{
-		*last_exit_status = 0;
-	}
+	if (*i)
+		return (0);
+	r = read(info->readfd, buf, _READ_BUFFER_SIZE);
+	if (r >= 0)
+		*i = r;
+	return (r);
 }
 
 /**
- * handle_unsetenv - Handle the unsetenv builtin command
- *
- * @args: The command arguments
- * @last_exit_status: Pointer to the last exit status
+ * _getline - Gets the next line of input from STDIN.
+ * @info: Parameter struct.
+ * @ptr: Address of a pointer to a buffer, preallocated or NULL.
+ * @length: Size of preallocated ptr buffer if not NULL.
+ * Return: s.
  */
-void handle_unsetenv(char **args, int *last_exit_status)
+int _getline(info_t *info, char **ptr, size_t *length)
 {
-	if (args[1] == NULL)
-	{
-		fprintf(stderr, "Usage: unsetenv VARIABLE\n");
-		*last_exit_status = 1;
-		return;
-	}
+	static char buf[_READ_BUFFER_SIZE];
+	static size_t i, len;
+	size_t k;
+	ssize_t r = 0, s = 0;
+	char *p = NULL, *new_p = NULL, *c;
 
-	if (custom_unsetenv(args[1]) != 0)
-	{
-		perror("unsetenv");
-		*last_exit_status = 1;
-	}
+	p = *ptr;
+	if (p && length)
+		s = *length;
+	if (i == len)
+		i = len = 0;
+
+	r = _read_buf(info, buf, &len);
+	if (r == -1 || (r == 0 && len == 0))
+		return (-1);
+
+	c = _strchr(buf + i, '\n');
+	k = c ? 1 + (unsigned int)(c - buf) : len;
+	new_p = _realloc(p, s, s ? s + k : k + 1);
+	if (!new_p) /* MALLOC FAILURE! */
+		return (p ? free(p), -1 : -1);
+
+	if (s)
+		_strncat(new_p, buf + i, k - i);
 	else
-	{
-		*last_exit_status = 0;
-	}
+		_strncpy(new_p, buf + i, k - i + 1);
+
+	s += k - i;
+	i = k;
+	p = new_p;
+
+	if (length)
+		*length = s;
+	*ptr = p;
+	return (s);
+}
+
+/**
+ * _sigintHandler - Blocks ctrl-C.
+ * @sig_num: The signal number.
+ * Return: void.
+ */
+void _sigintHandler(__attribute__((unused)) int sig_num)
+{
+	_puts("\n");
+	_puts("$ ");
+	_putchar(BUF_FLUSH);
 }

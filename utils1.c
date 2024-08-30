@@ -1,137 +1,140 @@
 #include "shell.h"
-#include <unistd.h>
 
 /**
- * print_environment - Print the environment variables
- *
- * This function prints the environment variables to the standard output.
+ * _myexit - Exits the shell
+ * @info: Structure containing potential arguments. Used to maintain
+ *          a constant function prototype.
+ * Return: Exits with a given exit status (0) if info->argv[0] != "exit".
  */
-void print_environment(void)
+int _myexit(info_t *info)
 {
-	char **env = environ;
+	int exitcheck;
 
-	while (*env)
+	if (info->argv[1]) /* If there is an exit argument */
 	{
-		printf("%s\n", *env);
-		env++;
+		exitcheck = _erratoi(info->argv[1]);
+		if (exitcheck == -1)
+		{
+			info->status = 2;
+			_print_error(info, "Illegal number: ");
+			_eputs(info->argv[1]);
+			_eputchar('\n');
+			return (1);
+		}
+		info->err_num = _erratoi(info->argv[1]);
+		return (-2);
 	}
+	info->err_num = -1;
+	return (-2);
 }
 
 /**
- * custom_setenv - Set an environment variable
- *
- * This function sets an environment variable with the given name and value.
- * If the variable already exists and overwrite is 0,
- * the function does nothing.
- * If the variable already exists and overwrite is 1,
- * the existing value is
- * overwritten.
- *
- * @name: The name of the environment variable to set
- * @value: The value to set the environment variable to
- * @overwrite: If 1, overwrite any existing value of the variable
- *
- * Return: 0 on success, -1 on failure
+ * _mycd - Changes the current directory of the process
+ * @info: Structure containing potential arguments. Used to maintain
+ *          a constant function prototype.
+ * Return: Always 0
  */
-int custom_setenv(const char *name, const char *value, int overwrite)
+int _mycd(info_t *info)
 {
-	char *env_var;
-	size_t name_len, value_len;
+	char *s, *dir, buffer[1024];
+	int chdir_ret;
 
-	if (name == NULL || name[0] == '\0' || strchr(name, '=') != NULL)
+	s = getcwd(buffer, 1024);
+	if (!s)
+		_puts("TODO: >>getcwd failure emsg here<<\n");
+	if (!info->argv[1])
 	{
-		return (-1);
+		dir = _getenv(info, "HOME=");
+		if (!dir)
+			chdir_ret = chdir((dir = _getenv(info, "PWD=")) ? dir : "/");
+		else
+			chdir_ret = chdir(dir);
 	}
-
-	if (getenv(name) != NULL && !overwrite)
+	else if (_strcmp(info->argv[1], "-") == 0)
 	{
-		return (0);
+		if (!_getenv(info, "OLDPWD="))
+		{
+			_puts(s);
+			_putchar('\n');
+			return (1);
+		}
+		_puts(_getenv(info, "OLDPWD=")), _putchar('\n');
+		chdir_ret = chdir((dir = _getenv(info, "OLDPWD=")) ? dir : "/");
 	}
-
-	name_len = strlen(name);
-	value_len = strlen(value);
-	env_var = malloc(name_len + value_len + 2);
-
-	if (env_var == NULL)
+	else
+		chdir_ret = chdir(info->argv[1]);
+	if (chdir_ret == -1)
 	{
-		return (-1);
+		_print_error(info, "can't cd to ");
+		_eputs(info->argv[1]), _eputchar('\n');
 	}
-
-	if (putenv(env_var) != 0)
+	else
 	{
-		return (-1);
+		_setenv(info, "OLDPWD", _getenv(info, "PWD="));
+		_setenv(info, "PWD", getcwd(buffer, 1024));
 	}
-
-	strcpy(env_var, name);
-	strcat(env_var, "=");
-	strcat(env_var, value);
-
-	if (putenv(env_var) != 0)
-	{
-		free(env_var);
-		return (-1);
-	}
-
 	return (0);
 }
 
 /**
- * custom_unsetenv - Unset an environment variable
- *
- * This function unsets an environment variable with the given name.
- *
- * @name: The name of the environment variable to unset
- *
- * Return:: 0 on success, -1 on failure
+ * _myhistory - Displays the history list,
+ * one command per line, preceded
+ * with line numbers, starting at 0.
+ * @info: Structure containing potential arguments. Used to maintain
+ * constant function prototype.
+ * Return: Always 0.
  */
-int custom_unsetenv(const char *name)
+int _myhistory(info_t *info)
 {
-	if (name == NULL || name[0] == '\0' || strchr(name, '=') != NULL)
-	{
-		return (-1);
-	}
-
-	return (unsetenv(name));
+	_print_list(info->history);
+	return (0);
 }
 
 /**
- * change_directory - Change the current working directory
- *
- * This function changes the current working directory to the given path.
- * If the path is NULL, the function changes to the home directory.
- *
- * @path: The path to change to
+ * _unset_alias - Unsets an alias.
+ * @info: The parameter struct.
+ * @str: The string alias.
+ * Return: Always 0 on success, 1 on error.
  */
-void change_directory(char *path)
+int _unset_alias(info_t *info, char *str)
 {
-	char *new_path = path ? path : getenv("HOME");
-	char cwd[PATH_MAX];
+	char *p, c;
+	int ret;
 
-	if (chdir(new_path) != 0)
+	p = _strchr(str, '=');
+	if (!p)
 	{
-		perror("cd");
+		return (1);
 	}
-	else if (getcwd(cwd, sizeof(cwd)) != NULL)
-	{
-		setenv("PWD", cwd, 1);
-	}
-	else
-	{
-		perror("getcwd");
-	}
+	c = *p;
+	*p = 0;
+	ret = _delete_node_at_index(&(info->alias),
+								_get_node_index(info->alias,
+												_node_starts_with(info->alias, str, -1)));
+	*p = c;
+	return (ret);
 }
 
 /**
- * print_general_help - Print general help message
+ * _set_alias - Sets an alias to a string.
+ * @info: The parameter struct.
+ * @str: The string alias.
+ * Return: Always 0 on success, 1 on error.
  */
-void print_general_help(void)
+int _set_alias(info_t *info, char *str)
 {
-	printf("Shell Help:\n");
-	printf("  exit [status]: Exit the shell with a status code.\n");
-	printf("  env: Display the current environment variables.\n");
-	printf("  setenv VARIABLE VALUE: Set or update an environment variable.\n");
-	printf("  unsetenv VARIABLE: Remove an environment variable.\n");
-	printf("  cd [DIRECTORY]: Change the current directory.\n");
-	printf("  alias [name='value']: Define or display aliases.\n");
-	printf("  help [command]: Display help for a specific command.\n");
+	char *p;
+
+	p = _strchr(str, '=');
+	if (!p)
+	{
+		return (1);
+	}
+	if (!*++p)
+	{
+		return (_unset_alias(info, str));
+	}
+
+	_unset_alias(info, str);
+	return (_add_node_end(&(info->alias), str, 0) == NULL);
 }
