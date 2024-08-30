@@ -22,6 +22,7 @@ void execute_command(char *input, char **envp, int *last_exit_status)
 	}
 
 	expand_variables(args);
+	handle_aliases(args);
 
 	if (is_builtin(args[0]))
 	{
@@ -53,6 +54,7 @@ void execute_external_command(char **args, char **envp, int *last_exit_status)
 	if (executable == NULL)
 	{
 		fprintf(stderr, "%s: command not found\n", args[0]);
+		*last_exit_status = 127;
 		return;
 	}
 

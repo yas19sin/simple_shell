@@ -8,9 +8,12 @@
 #include <sys/types.h>
 #include <sys/wait.h>
 #include <limits.h>
+#include <errno.h>
 
 #define BUFFER_SIZE 1024
 #define MAX_ALIASES 100
+
+extern char **environ;
 
 /**
  * struct alias - a shell alias
@@ -31,11 +34,14 @@ void execute_external_command(char **args, char **envp, int *last_exit_status);
 char *search_path(char *command);
 char *construct_path(char *dir, char *command, size_t command_len);
 void handle_exit(char **args, int *last_exit_status);
-void handle_setenv(char **args);
-void handle_unsetenv(char **args);
-void handle_cd(char **args);
+void handle_setenv(char **args, int *last_exit_status);
+void handle_unsetenv(char **args, int *last_exit_status);
+void handle_cd(char **args, int *last_exit_status);
 void replace_variable(char **arg, int value);
 void expand_env_variable(char **arg);
+char *get_last_exit_status_str(void);
+void set_last_exit_status(int status);
+void set_program_name(char *name);
 
 /* Input */
 char *read_input(void);
@@ -56,7 +62,8 @@ void free_args(char **args);
 void change_directory(char *path);
 
 /* Builtins */
-void handle_alias(char **args);
+void handle_alias_builtin(char **args);
+void handle_aliases(char **args);
 int handle_file_input(const char *filename,
 					  char **envp, int *last_exit_status);
 int handle_interactive_input(char **envp,
@@ -67,5 +74,6 @@ void handle_command_separators(char *input,
 							   char **envp, int *last_exit_status);
 void print_help(char **args);
 int is_builtin(char *command);
+void initialize_aliases(void);
 
 #endif /* SHELL_H */

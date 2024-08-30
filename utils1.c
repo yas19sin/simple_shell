@@ -8,12 +8,12 @@
  */
 void print_environment(void)
 {
-	char **environ = environ;
-	int i;
+	char **env = environ;
 
-	for (i = 0; environ[i]; i++)
+	while (*env)
 	{
-		printf("%s\n", environ[i]);
+		printf("%s\n", *env);
+		env++;
 	}
 }
 
@@ -36,6 +36,7 @@ void print_environment(void)
 int custom_setenv(const char *name, const char *value, int overwrite)
 {
 	char *env_var;
+	size_t name_len, value_len;
 
 	if (name == NULL || name[0] == '\0' || strchr(name, '=') != NULL)
 	{
@@ -47,14 +48,18 @@ int custom_setenv(const char *name, const char *value, int overwrite)
 		return (0);
 	}
 
-	env_var = malloc(strlen(name) + strlen(value) + 2);
+	name_len = strlen(name);
+	value_len = strlen(value);
+	env_var = malloc(name_len + value_len + 2);
 
 	if (env_var == NULL)
 	{
 		return (-1);
 	}
 
-	sprintf(env_var, "%s=%s", name, value);
+	strcpy(env_var, name);
+	strcat(env_var, "=");
+	strcat(env_var, value);
 
 	if (putenv(env_var) != 0)
 	{

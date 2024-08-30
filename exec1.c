@@ -51,30 +51,34 @@ void execute_builtin(char **args, int *last_exit_status)
 	else if (strcmp(args[0], "env") == 0)
 	{
 		print_environment();
+		*last_exit_status = 0;
 	}
 	else if (strcmp(args[0], "setenv") == 0)
 	{
-		handle_setenv(args);
+		handle_setenv(args, last_exit_status);
 	}
 	else if (strcmp(args[0], "unsetenv") == 0)
 	{
-		handle_unsetenv(args);
+		handle_unsetenv(args, last_exit_status);
 	}
 	else if (strcmp(args[0], "cd") == 0)
 	{
-		handle_cd(args);
+		handle_cd(args, last_exit_status);
 	}
 	else if (strcmp(args[0], "alias") == 0)
 	{
-		handle_alias(args);
+		handle_alias_builtin(args);
+		*last_exit_status = 0;
 	}
 	else if (strcmp(args[0], "help") == 0)
 	{
 		print_help(args);
+		*last_exit_status = 0;
 	}
 	else
 	{
 		fprintf(stderr, "Error: Command not recognized\n");
+		*last_exit_status = 1;
 	}
 }
 
@@ -86,31 +90,50 @@ void execute_builtin(char **args, int *last_exit_status)
  */
 void handle_exit(char **args, int *last_exit_status)
 {
-	if (args[1] == NULL)
+	int status = 0;
+
+	if (args[1] != NULL)
 	{
-		exit(*last_exit_status);
+		char *endptr;
+		long int num = strtol(args[1], &endptr, 10);
+
+		if (*endptr != '\0' || num > INT_MAX || num < INT_MIN)
+		{
+			fprintf(stderr, "exit: Illegal number: %s\n", args[1]);
+			*last_exit_status = 2;
+			return;
+		}
+
+		status = (int)num;
 	}
-	else
-	{
-		*last_exit_status = atoi(args[1]);
-		exit(*last_exit_status);
-	}
+
+	*last_exit_status = status;
+	exit(*last_exit_status);
 }
 
 /**
  * handle_setenv - Handle the setenv builtin command
  *
  * @args: The command arguments
+ * @last_exit_status: Pointer to the last exit status
  */
-void handle_setenv(char **args)
+void handle_setenv(char **args, int *last_exit_status)
 {
-	if (args[1] && args[2])
+	if (args[1] == NULL || args[2] == NULL)
 	{
-		custom_setenv(args[1], args[2], 1);
+		fprintf(stderr, "Usage: setenv VARIABLE VALUE\n");
+		*last_exit_status = 1;
+		return;
+	}
+
+	if (custom_setenv(args[1], args[2], 1) != 0)
+	{
+		perror("setenv");
+		*last_exit_status = 1;
 	}
 	else
 	{
-		fprintf(stderr, "Usage: setenv VARIABLE VALUE\n");
+		*last_exit_status = 0;
 	}
 }
 
@@ -118,15 +141,24 @@ void handle_setenv(char **args)
  * handle_unsetenv - Handle the unsetenv builtin command
  *
  * @args: The command arguments
+ * @last_exit_status: Pointer to the last exit status
  */
-void handle_unsetenv(char **args)
+void handle_unsetenv(char **args, int *last_exit_status)
 {
-	if (args[1])
+	if (args[1] == NULL)
 	{
-		custom_unsetenv(args[1]);
+		fprintf(stderr, "Usage: unsetenv VARIABLE\n");
+		*last_exit_status = 1;
+		return;
+	}
+
+	if (custom_unsetenv(args[1]) != 0)
+	{
+		perror("unsetenv");
+		*last_exit_status = 1;
 	}
 	else
 	{
-		fprintf(stderr, "Usage: unsetenv VARIABLE\n");
+		*last_exit_status = 0;
 	}
 }

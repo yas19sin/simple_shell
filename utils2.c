@@ -1,5 +1,8 @@
 #include "shell.h"
 
+static size_t alias_count;
+static Alias aliases[MAX_ALIASES];
+
 /**
  * print_aliases - Print all aliases
  * @aliases: Array of aliases
@@ -11,7 +14,8 @@ void print_aliases(Alias *aliases, size_t alias_count)
 
 	for (i = 0; i < alias_count; i++)
 	{
-		printf("%s='%s'\n", aliases[i].name, aliases[i].value);
+		printf("%s='%s'\n", aliases[i].name,
+			   aliases[i].value);
 	}
 }
 
@@ -22,7 +26,8 @@ void print_aliases(Alias *aliases, size_t alias_count)
  * @name: Name of the alias
  * @value: Value of the alias
  */
-void set_alias(Alias *aliases, size_t *alias_count, char *name, char *value)
+void set_alias(Alias *aliases, size_t *alias_count,
+			   char *name, char *value)
 {
 	size_t i;
 
@@ -45,12 +50,13 @@ void set_alias(Alias *aliases, size_t *alias_count, char *name, char *value)
 }
 
 /**
- * print_specific_alias - Print a specific alias or error if not found
+ * print_specific_alias - Print a specific alias
  * @aliases: Array of aliases
  * @alias_count: Number of aliases
  * @name: Name of the alias to print
  */
-void print_specific_alias(Alias *aliases, size_t alias_count, char *name)
+void print_specific_alias(Alias *aliases,
+						  size_t alias_count, char *name)
 {
 	size_t i;
 
@@ -58,7 +64,8 @@ void print_specific_alias(Alias *aliases, size_t alias_count, char *name)
 	{
 		if (strcmp(aliases[i].name, name) == 0)
 		{
-			printf("%s='%s'\n", aliases[i].name, aliases[i].value);
+			printf("%s='%s'\n", aliases[i].name,
+				   aliases[i].value);
 			return;
 		}
 	}
@@ -67,20 +74,11 @@ void print_specific_alias(Alias *aliases, size_t alias_count, char *name)
 }
 
 /**
- * handle_alias - Handle the alias command
- *
- * This function handles the alias command. If no arguments are given, it
- * prints out all the current aliases. If one or two arguments are given, it
- * sets a new alias. If the name of the alias is already in use, the value
- * is overwritten.
- *
+ * handle_alias_builtin - Handle the alias command
  * @args: The arguments to the alias command
  */
-void handle_alias(char **args)
+void handle_alias_builtin(char **args)
 {
-	static size_t alias_count;
-	static Alias aliases[MAX_ALIASES];
-
 	if (args[1] == NULL)
 	{
 		print_aliases(aliases, alias_count);
@@ -96,11 +94,14 @@ void handle_alias(char **args)
 
 			if (value)
 			{
-				set_alias(aliases, &alias_count, name, value);
+				set_alias(aliases, &alias_count,
+						  name, value);
 			}
 			else
 			{
-				print_specific_alias(aliases, alias_count, name);
+				print_specific_alias(aliases,
+									 alias_count,
+									 name);
 			}
 		}
 	}

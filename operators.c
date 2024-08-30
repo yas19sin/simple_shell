@@ -18,7 +18,7 @@
 int handle_logical_operators(char *input, char **envp, int *last_exit_status)
 {
 	char *token, *saveptr;
-	int *prev_status = 0;
+	int prev_status = 0;
 	int operators = 0; /* 0: none, 1: &&, 2: || */
 
 	token = strtok_r(input, "&|", &saveptr);
@@ -34,7 +34,7 @@ int handle_logical_operators(char *input, char **envp, int *last_exit_status)
 			(operators == 2 && prev_status != 0))
 		{
 			execute_command(trimmed, envp, last_exit_status);
-			prev_status = last_exit_status;
+			prev_status = *last_exit_status;
 		}
 
 		if (saveptr[0] == '&' && saveptr[1] == '&')
@@ -55,7 +55,7 @@ int handle_logical_operators(char *input, char **envp, int *last_exit_status)
 		token = strtok_r(NULL, "&|", &saveptr);
 	}
 
-	return (*prev_status);
+	return (prev_status);
 }
 
 /**

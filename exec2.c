@@ -4,17 +4,50 @@
  * handle_cd - Handle the cd builtin command
  *
  * @args: The command arguments
+ * @last_exit_status: Pointer to the last exit status
  */
-void handle_cd(char **args)
+void handle_cd(char **args, int *last_exit_status)
 {
-	if (args[1])
+	char *target_dir;
+	char cwd[PATH_MAX];
+
+	if (args[1] == NULL || strcmp(args[1], "~") == 0)
 	{
-		change_directory(args[1]);
+		target_dir = getenv("HOME");
+	}
+	else if (strcmp(args[1], "-") == 0)
+	{
+		target_dir = getenv("OLDPWD");
+		if (target_dir == NULL)
+		{
+			fprintf(stderr, "cd: OLDPWD not set\n");
+			*last_exit_status = 1;
+			return;
+		}
+		printf("%s\n", target_dir);
 	}
 	else
 	{
-		change_directory(NULL);
+		target_dir = args[1];
 	}
+
+	if (chdir(target_dir) != 0)
+	{
+		perror("cd");
+		*last_exit_status = 1;
+		return;
+	}
+
+	if (getcwd(cwd, sizeof(cwd)) == NULL)
+	{
+		perror("getcwd");
+		*last_exit_status = 1;
+		return;
+	}
+
+	custom_setenv("OLDPWD", getenv("PWD"), 1);
+	custom_setenv("PWD", cwd, 1);
+	*last_exit_status = 0;
 }
 
 /**
@@ -30,12 +63,15 @@ void handle_cd(char **args)
 void expand_variables(char **args)
 {
 	int i;
+	char *last_exit_status_str;
+
+	last_exit_status_str = get_last_exit_status_str();
 
 	for (i = 0; args[i] != NULL; i++)
 	{
 		if (strcmp(args[i], "$?") == 0)
 		{
-			replace_variable(&args[i], getpid());
+			replace_variable(&args[i], *last_exit_status_str);
 		}
 		else if (strcmp(args[i], "$$") == 0)
 		{
@@ -46,6 +82,8 @@ void expand_variables(char **args)
 			expand_env_variable(&args[i]);
 		}
 	}
+
+	free(last_exit_status_str);
 }
 
 /**
@@ -56,9 +94,11 @@ void expand_variables(char **args)
  */
 void replace_variable(char **arg, int value)
 {
+	char value_str[12]; /* Max size of an int as string + null terminator */
+
+	snprintf(value_str, sizeof(value_str), "%d", value);
 	free(*arg);
-	*arg = malloc(10);
-	snprintf(*arg, 10, "%d", value);
+	*arg = strdup(value_str);
 }
 
 /**
