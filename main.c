@@ -17,6 +17,7 @@ int main(int argc, char *argv[], char **envp)
 	int last_exit_status = 0;
 
 	initialize_aliases();
+	signal(SIGINT, sigint_handler);
 
 	if (argc > 1)
 	{
@@ -121,4 +122,18 @@ void print_command_help(char *command)
 		}
 	}
 	print_general_help();
+}
+
+/**
+ * sigint_handler - Handle SIGINT signal
+ * @sig: The signal number
+ *
+ * This function is called when the SIGINT signal is received.
+ * It prints a newline and prompts the user for another command.
+ * Return: Nothing
+ */
+void sigint_handler(int sig)
+{
+	(void)sig;
+	write(STDERR_FILENO, "\n$ ", 3);
 }

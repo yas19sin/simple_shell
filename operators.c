@@ -90,3 +90,29 @@ void handle_command_separators(char *input, char **envp, int *last_exit_status)
 		token = strtok_r(NULL, ";", &saveptr);
 	}
 }
+
+/**
+ * add_arg - Add an argument to the argument list
+ * @args: The argument list
+ * @arg_count: The number of arguments
+ * @arg_start: The start of the argument
+ *
+ * Return: The updated argument list
+ */
+char **add_arg(char **args, int *arg_count, char *arg_start)
+{
+	args = realloc(args, (*arg_count + 1) * sizeof(char *));
+	if (!args)
+	{
+		perror("realloc failed");
+		exit(EXIT_FAILURE);
+	}
+	args[*arg_count] = strdup(arg_start);
+	if (!args[*arg_count])
+	{
+		perror("strdup failed");
+		exit(EXIT_FAILURE);
+	}
+	(*arg_count)++;
+	return (args);
+}

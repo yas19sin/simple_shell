@@ -112,44 +112,33 @@ char *custom_getline(FILE *file)
  */
 char **parse_input(char *input)
 {
-	char **args = NULL, *token, *saveptr;
-	int arg_count = 0, in_quotes = 0, i;
+	char **args = NULL, *arg_start = input;
+	int arg_count = 0, in_quotes = 0;
 
-	for (token = strtok_r(input, " \t\n", &saveptr);
-		 token != NULL; token = strtok_r(NULL, " \t\n", &saveptr))
+	while (*input)
 	{
-		if (token[0] == '#' && !in_quotes)
+		if (*input == '"')
+			in_quotes = !in_quotes;
+		else if ((*input == ' ' || *input == '\t' || *input == '\n') && !in_quotes)
 		{
+			*input = '\0';
+			if (input > arg_start)
+				args = add_arg(args, &arg_count, arg_start);
+			arg_start = input + 1;
+		}
+		else if (*input == '#' && !in_quotes)
+		{
+			*input = '\0';
+			if (input > arg_start)
+				args = add_arg(args, &arg_count, arg_start);
 			break;
 		}
-		for (i = 0; token[i]; i++)
-		{
-			if (token[i] == '"')
-			{
-				in_quotes = !in_quotes;
-			}
-		}
-		args = realloc(args, (arg_count + 1) * sizeof(char *));
+		input++;
+	}
 
-		if (args == NULL)
-		{
-			perror("realloc failed");
-			exit(EXIT_FAILURE);
-		}
-		args[arg_count] = strdup(token);
-		if (args[arg_count] == NULL)
-		{
-			perror("strdup failed");
-			exit(EXIT_FAILURE);
-		}
-		arg_count++;
-	}
+	if (input > arg_start)
+		args = add_arg(args, &arg_count, arg_start);
 	args = realloc(args, (arg_count + 1) * sizeof(char *));
-	if (args == NULL)
-	{
-		perror("realloc failed");
-		exit(EXIT_FAILURE);
-	}
 	args[arg_count] = NULL;
 	return (args);
 }

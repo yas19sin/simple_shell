@@ -41,6 +41,7 @@ void replace_variable(char **arg, int value);
 void expand_env_variable(char **arg);
 char *get_last_exit_status_str(void);
 void set_last_exit_status(int status);
+void sigint_handler(int sig);
 
 /* Input */
 char *read_input(void);
@@ -48,6 +49,7 @@ char **parse_input(char *input);
 void expand_variables(char **args);
 void print_general_help(void);
 void print_command_help(char *command);
+char **add_arg(char **args, int *arg_count, char *arg_start);
 
 /* Environment */
 void print_environment(void);
